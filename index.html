@@ -2,10 +2,9 @@
 <html lang="fr">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport"
-        content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
-  <title>Mausolée — AR GPS</title>
+  <title>Mausolée royal de Maurétanie — AR GPS</title>
 
   <script type="module"
     src="https://ajax.googleapis.com/ajax/libs/model-viewer/4.0.0/model-viewer.min.js">
@@ -29,6 +28,15 @@
       padding: 15px;
     }
 
+    h1 {
+      margin: 5px 0;
+      font-size: 23px;
+    }
+
+    p {
+      color: #ccc;
+    }
+
     button {
       border: 0;
       border-radius: 25px;
@@ -36,12 +44,13 @@
       margin: 6px;
       font-size: 16px;
       font-weight: bold;
+      cursor: pointer;
     }
 
     #info {
-      padding: 12px;
+      padding: 15px;
       background: #222;
-      line-height: 1.6;
+      line-height: 1.7;
     }
 
     #camera {
@@ -56,17 +65,19 @@
     #video {
       position: absolute;
       inset: 0;
+
       width: 100%;
       height: 100%;
+
       object-fit: cover;
     }
 
     /*
-      Zone dans laquelle le monument
-      sera positionné.
+      Le Mausolée est caché par défaut.
     */
 
     #monument {
+      display: none;
 
       position: absolute;
 
@@ -79,33 +90,55 @@
       transform:
         translate(-50%, -50%);
 
-      transition:
-        left 0.15s linear;
-
       pointer-events: auto;
+
+      background: transparent;
+    }
+
+    #direction {
+
+      position: absolute;
+
+      top: 20px;
+      left: 15px;
+      right: 15px;
+
+      z-index: 30;
+
+      padding: 12px;
+
+      background:
+        rgba(0,0,0,0.70);
+
+      border-radius: 12px;
+
+      font-size: 16px;
     }
 
     #close {
+
       position: absolute;
-      top: 20px;
-      right: 20px;
-      z-index: 30;
+
+      top: 70px;
+      right: 15px;
+
+      z-index: 40;
+
       background: white;
       color: black;
     }
 
-    #direction {
-      position: absolute;
-      top: 20px;
-      left: 20px;
-      right: 80px;
+    #warning {
 
-      z-index: 30;
+      display: none;
 
-      padding: 10px;
+      padding: 15px;
 
-      background:
-        rgba(0,0,0,0.65);
+      background: #332200;
+
+      color: #ffd27a;
+
+      margin: 10px;
 
       border-radius: 10px;
     }
@@ -116,6 +149,7 @@
 
 <body>
 
+
 <header>
 
   <h1>
@@ -123,15 +157,15 @@
   </h1>
 
   <p>
-    Prototype AR GPS
+    Expérience AR géolocalisée
   </p>
 
   <button onclick="startGPS()">
-    📍 Activer GPS
+    📍 Activer ma position
   </button>
 
   <button onclick="startCamera()">
-    📷 Démarrer AR
+    📷 Démarrer
   </button>
 
 </header>
@@ -140,31 +174,40 @@
 <div id="info">
 
   <div id="gpsStatus">
-    GPS : non activé
+    📍 GPS : non activé
   </div>
 
   <div id="distance">
-    Distance : —
+    📏 Distance : —
   </div>
 
   <div id="bearing">
-    Direction : —
+    🎯 Direction : —
   </div>
 
   <div id="heading">
-    Orientation téléphone : —
+    🧭 Orientation : —
   </div>
 
 </div>
 
 
-<!-- Modèle 3D normal -->
+<div id="warning">
+  Approchez-vous du point du monument pour
+  débloquer la reconstitution 3D.
+</div>
+
+
+<!--
+  Modèle 3D classique.
+  Il reste disponible pour consultation.
+-->
 
 <model-viewer
 
   src="mausolee.glb"
 
-  alt="Mausolée royal de Maurétanie"
+  alt="Reconstitution 3D du Mausolée royal de Maurétanie"
 
   camera-controls
 
@@ -181,9 +224,12 @@
 </model-viewer>
 
 
-<!-- MODE CAMERA -->
+<!--
+  MODE CAMÉRA
+-->
 
 <div id="camera">
+
 
   <video
     id="video"
@@ -193,7 +239,7 @@
 
 
   <div id="direction">
-    🧭 Recherche de la direction...
+    📍 Activation du GPS...
   </div>
 
 
@@ -203,7 +249,7 @@
 
     src="mausolee.glb"
 
-    alt="Mausolée"
+    alt="Mausolée royal de Maurétanie"
 
     camera-controls
 
@@ -222,15 +268,16 @@
 
   </button>
 
+
 </div>
 
 
 <script>
 
 
-/* =========================================
-   POSITION DU MONUMENT
-   ========================================= */
+/* =====================================================
+   POSITION GPS DU MONUMENT — TEST
+   ===================================================== */
 
 const TARGET_LAT =
   36.6724831;
@@ -239,9 +286,20 @@ const TARGET_LON =
   3.1432060;
 
 
-/* =========================================
+/*
+   RAYON DE DÉCLENCHEMENT
+
+   Le Mausolée n'apparaît qu'à 10 mètres
+   ou moins du point GPS.
+*/
+
+const ACTIVATION_RADIUS =
+  10;
+
+
+/* =====================================================
    VARIABLES
-   ========================================= */
+   ===================================================== */
 
 let userLat = null;
 
@@ -251,18 +309,21 @@ let targetBearing = null;
 
 let phoneHeading = null;
 
+let currentDistance = Infinity;
 
-/* =========================================
+
+/* =====================================================
    GPS
-   ========================================= */
+   ===================================================== */
 
 function startGPS() {
 
   if (!navigator.geolocation) {
 
-    alert(
-      "Votre téléphone ne possède pas de GPS utilisable."
-    );
+    document.getElementById(
+      "gpsStatus"
+    ).innerText =
+      "❌ GPS non disponible.";
 
     return;
   }
@@ -271,21 +332,27 @@ function startGPS() {
   document.getElementById(
     "gpsStatus"
   ).innerText =
-    "GPS : recherche...";
+    "📍 Recherche de votre position...";
 
 
   navigator.geolocation.watchPosition(
 
     function(position) {
 
+
       userLat =
         position.coords.latitude;
+
 
       userLon =
         position.coords.longitude;
 
 
-      const distance =
+      /*
+        Calcul de la distance
+      */
+
+      currentDistance =
         calculateDistance(
 
           userLat,
@@ -296,6 +363,10 @@ function startGPS() {
 
         );
 
+
+      /*
+        Calcul de la direction
+      */
 
       targetBearing =
         calculateBearing(
@@ -309,44 +380,57 @@ function startGPS() {
         );
 
 
+      /*
+        Affichage GPS
+      */
+
       document.getElementById(
         "gpsStatus"
       ).innerText =
-        "GPS : actif";
+        "✅ GPS actif";
 
 
       document.getElementById(
         "distance"
       ).innerText =
         "📏 Distance : " +
-        Math.round(distance) +
+        Math.round(currentDistance) +
         " m";
 
 
       document.getElementById(
         "bearing"
       ).innerText =
-        "🎯 Direction du monument : " +
+        "🎯 Direction : " +
         Math.round(targetBearing) +
         "°";
 
 
-      updateMonument();
+      /*
+        Vérification du rayon
+      */
+
+      updateActivation();
+
 
     },
 
     function(error) {
+
 
       document.getElementById(
         "gpsStatus"
       ).innerText =
         "❌ GPS refusé";
 
-      alert(
-        "Autorisez la localisation dans Chrome."
-      );
+
+      document.getElementById(
+        "warning"
+      ).style.display =
+        "block";
 
     },
+
 
     {
 
@@ -363,34 +447,132 @@ function startGPS() {
 }
 
 
-/* =========================================
-   DISTANCE GPS
-   ========================================= */
+/* =====================================================
+   ACTIVATION DU MONUMENT
+   ===================================================== */
+
+function updateActivation() {
+
+
+  const monument =
+    document.getElementById(
+      "monument"
+    );
+
+
+  /*
+    PLUS DE 10 MÈTRES
+    =================
+
+    Monument invisible.
+  */
+
+  if (
+    currentDistance >
+    ACTIVATION_RADIUS
+  ) {
+
+
+    monument.style.display =
+      "none";
+
+
+    document.getElementById(
+      "warning"
+    ).style.display =
+      "block";
+
+
+    document.getElementById(
+      "direction"
+    ).innerText =
+
+      "📍 Approchez-vous du monument : " +
+
+      Math.round(currentDistance) +
+
+      " m";
+
+
+    return;
+
+  }
+
+
+  /*
+    10 MÈTRES OU MOINS
+    ===================
+
+    Monument activé.
+  */
+
+  monument.style.display =
+    "block";
+
+
+  document.getElementById(
+    "warning"
+  ).style.display =
+    "none";
+
+
+  document.getElementById(
+    "direction"
+  ).innerText =
+
+    "🏛️ Monument activé — " +
+
+    Math.round(currentDistance) +
+
+    " m";
+
+
+  updateMonumentPosition();
+
+}
+
+
+/* =====================================================
+   CALCUL DISTANCE
+   ===================================================== */
 
 function calculateDistance(
 
   lat1,
   lon1,
+
   lat2,
   lon2
 
 ) {
 
-  const R = 6371000;
+
+  const R =
+    6371000;
+
 
   const p1 =
-    lat1 * Math.PI / 180;
+    lat1 *
+    Math.PI /
+    180;
+
 
   const p2 =
-    lat2 * Math.PI / 180;
+    lat2 *
+    Math.PI /
+    180;
+
 
   const dp =
-    (lat2 - lat1)
-    * Math.PI / 180;
+    (lat2 - lat1) *
+    Math.PI /
+    180;
+
 
   const dl =
-    (lon2 - lon1)
-    * Math.PI / 180;
+    (lon2 - lon1) *
+    Math.PI /
+    180;
 
 
   const a =
@@ -402,6 +584,7 @@ function calculateDistance(
 
     Math.cos(p1) *
     Math.cos(p2) *
+
     Math.sin(dl / 2) *
     Math.sin(dl / 2);
 
@@ -409,6 +592,7 @@ function calculateDistance(
   const c =
 
     2 *
+
     Math.atan2(
 
       Math.sqrt(a),
@@ -423,51 +607,61 @@ function calculateDistance(
 }
 
 
-/* =========================================
-   CALCUL DE DIRECTION
-   ========================================= */
+/* =====================================================
+   CALCUL DE LA DIRECTION
+   ===================================================== */
 
 function calculateBearing(
 
   lat1,
   lon1,
+
   lat2,
   lon2
 
 ) {
 
+
   const p1 =
-    lat1 * Math.PI / 180;
+    lat1 *
+    Math.PI /
+    180;
+
 
   const p2 =
-    lat2 * Math.PI / 180;
+    lat2 *
+    Math.PI /
+    180;
+
 
   const dl =
-    (lon2 - lon1)
-    * Math.PI / 180;
+    (lon2 - lon1) *
+    Math.PI /
+    180;
 
 
   const y =
-    Math.sin(dl)
-    * Math.cos(p2);
+    Math.sin(dl) *
+    Math.cos(p2);
 
 
   const x =
 
-    Math.cos(p1)
-    * Math.sin(p2)
+    Math.cos(p1) *
+    Math.sin(p2)
 
     -
 
-    Math.sin(p1)
-    * Math.cos(p2)
-    * Math.cos(dl);
+    Math.sin(p1) *
+    Math.cos(p2) *
+    Math.cos(dl);
 
 
   let bearing =
 
-    Math.atan2(y, x)
-    * 180 / Math.PI;
+    Math.atan2(y, x) *
+    180 /
+    Math.PI;
 
 
   return (
@@ -477,44 +671,66 @@ function calculateBearing(
 }
 
 
-/* =========================================
-   ORIENTATION TELEPHONE
-   ========================================= */
+/* =====================================================
+   ORIENTATION
+   ===================================================== */
 
 function startOrientation() {
 
+
+  /*
+    Certains appareils demandent
+    une autorisation spéciale.
+  */
+
   if (
+
     typeof DeviceOrientationEvent !==
-    "undefined" &&
+    "undefined"
+
+    &&
 
     typeof DeviceOrientationEvent.requestPermission ===
     "function"
+
   ) {
+
 
     DeviceOrientationEvent
       .requestPermission()
 
       .then(function(permission) {
 
+
         if (
-          permission === "granted"
+          permission ===
+          "granted"
         ) {
 
+
           window.addEventListener(
+
             "deviceorientationabsolute",
+
             handleOrientation,
+
             true
+
           );
 
         }
 
       })
 
-      .catch(console.error);
+      .catch(
+        console.error
+      );
 
   }
 
+
   else {
+
 
     window.addEventListener(
 
@@ -525,6 +741,7 @@ function startOrientation() {
       true
 
     );
+
 
     window.addEventListener(
 
@@ -541,79 +758,140 @@ function startOrientation() {
 }
 
 
-/* =========================================
+/* =====================================================
    LECTURE BOUSSOLE
-   ========================================= */
+   ===================================================== */
 
-function handleOrientation(event) {
+function handleOrientation(
+  event
+) {
 
-  let heading = null;
+
+  let heading =
+    null;
 
 
   /*
-    Android Chrome :
-
-    alpha = rotation autour de l'axe Z.
-
+    iPhone
   */
 
   if (
+
     event.webkitCompassHeading
     !== undefined
+
   ) {
+
 
     heading =
       event.webkitCompassHeading;
 
   }
 
+
+  /*
+    Android
+  */
+
   else if (
-    event.alpha !== null
+
+    event.alpha !==
+    null
+
   ) {
 
+
     heading =
-      360 - event.alpha;
+      360 -
+      event.alpha;
 
   }
 
 
-  if (heading !== null) {
+  if (
+    heading !== null
+  ) {
+
 
     phoneHeading =
-      (heading + 360) % 360;
+
+      (
+        heading + 360
+      ) % 360;
 
 
     document.getElementById(
       "heading"
     ).innerText =
 
-      "🧭 Téléphone : " +
-      Math.round(phoneHeading) +
+      "🧭 Orientation : " +
+
+      Math.round(
+        phoneHeading
+      ) +
+
       "°";
 
 
-    updateMonument();
+    updateMonumentPosition();
 
   }
 
 }
 
 
-/* =========================================
-   POSITION DU MAUSOLÉE À L'ÉCRAN
-   ========================================= */
+/* =====================================================
+   POSITION DU MODÈLE SUR L'ÉCRAN
+   ===================================================== */
 
-function updateMonument() {
+function updateMonumentPosition() {
+
+
+  /*
+    Ne rien faire si le visiteur
+    n'est pas dans le rayon.
+  */
 
   if (
-    targetBearing === null ||
-    phoneHeading === null
+
+    currentDistance >
+    ACTIVATION_RADIUS
+
   ) {
+
 
     return;
 
   }
 
+
+  if (
+
+    targetBearing ===
+    null
+
+    ||
+
+    phoneHeading ===
+    null
+
+  ) {
+
+
+    return;
+
+  }
+
+
+  /*
+    Différence entre :
+
+    direction du monument
+
+    et
+
+    direction du téléphone.
+  */
 
   let difference =
 
@@ -622,9 +900,8 @@ function updateMonument() {
 
 
   /*
-    Normalisation :
-
-    -180° à +180°
+    Normalisation
+    -180° → +180°
   */
 
   while (
@@ -649,33 +926,39 @@ function updateMonument() {
     Champ de vision approximatif.
   */
 
-  const FOV = 70;
+  const FOV =
+    70;
 
 
   /*
-    Si le monument est devant :
+    Position horizontale.
 
-    centre écran = 50%
+    50 = centre.
   */
 
-  let screenPosition =
+  let position =
 
     50 +
+
     (
-      difference / FOV
-    ) * 50;
+      difference /
+      FOV
+    ) *
+
+    50;
 
 
   /*
-    Limite écran
+    Limitation écran.
   */
 
-  screenPosition =
+  position =
+
     Math.max(
       -100,
       Math.min(
         200,
-        screenPosition
+        position
       )
     );
 
@@ -687,16 +970,23 @@ function updateMonument() {
 
 
   monument.style.left =
-    screenPosition + "%";
+    position + "%";
 
+
+  /*
+    Message direction.
+  */
 
   if (
-    Math.abs(difference) < 10
+    Math.abs(difference) <
+    10
   ) {
+
 
     document.getElementById(
       "direction"
     ).innerText =
+
       "🏛️ MONUMENT DEVANT VOUS";
 
   }
@@ -705,18 +995,22 @@ function updateMonument() {
     difference > 0
   ) {
 
+
     document.getElementById(
       "direction"
     ).innerText =
+
       "➡️ Tournez à droite";
 
   }
 
   else {
 
+
     document.getElementById(
       "direction"
     ).innerText =
+
       "⬅️ Tournez à gauche";
 
   }
@@ -724,13 +1018,15 @@ function updateMonument() {
 }
 
 
-/* =========================================
+/* =====================================================
    CAMÉRA
-   ========================================= */
+   ===================================================== */
 
 async function startCamera() {
 
+
   try {
+
 
     const stream =
 
@@ -749,7 +1045,8 @@ async function startCamera() {
 
     document.getElementById(
       "video"
-    ).srcObject = stream;
+    ).srcObject =
+      stream;
 
 
     document.getElementById(
@@ -758,15 +1055,41 @@ async function startCamera() {
       "block";
 
 
+    /*
+      Commence l'orientation
+    */
+
     startOrientation();
+
+
+    /*
+      Si le GPS n'est pas encore
+      activé, on le lance.
+    */
+
+    if (
+      userLat === null
+    ) {
+
+      startGPS();
+
+    }
+
+
+    updateActivation();
 
 
   }
 
   catch (error) {
 
+
     alert(
-      "Impossible d'ouvrir la caméra. Autorisez l'accès à la caméra."
+
+      "Impossible d'ouvrir la caméra. " +
+
+      "Autorisez la caméra dans Chrome."
+
     );
 
   }
@@ -774,11 +1097,12 @@ async function startCamera() {
 }
 
 
-/* =========================================
+/* =====================================================
    FERMER
-   ========================================= */
+   ===================================================== */
 
 function closeCamera() {
+
 
   const video =
     document.getElementById(
@@ -789,6 +1113,7 @@ function closeCamera() {
   if (
     video.srcObject
   ) {
+
 
     video.srcObject
       .getTracks()
