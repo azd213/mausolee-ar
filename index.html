@@ -4,82 +4,74 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
-  <title>Mausolée royal de Maurétanie — 3D & Réalité augmentée</title>
+  <title>Mausolée — Test GPS</title>
 
   <script type="module"
     src="https://ajax.googleapis.com/ajax/libs/model-viewer/4.0.0/model-viewer.min.js">
   </script>
 
   <style>
-    * {
-      box-sizing: border-box;
-    }
-
     body {
       margin: 0;
       font-family: Arial, sans-serif;
       background: #111;
       color: white;
+      text-align: center;
     }
 
     header {
-      text-align: center;
-      padding: 20px 15px 10px;
-    }
-
-    h1 {
-      margin: 0;
-      font-size: 24px;
-    }
-
-    p {
-      color: #ccc;
-      margin: 8px 0;
+      padding: 18px;
     }
 
     model-viewer {
       width: 100%;
-      height: 75vh;
+      height: 65vh;
       background: #222;
     }
 
-    #ar-button {
-      display: none;
-      position: absolute;
-      bottom: 30px;
-      left: 50%;
-      transform: translateX(-50%);
-      background: white;
-      color: #111;
-      border: none;
-      border-radius: 30px;
-      padding: 15px 24px;
-      font-size: 17px;
-      font-weight: bold;
-      cursor: pointer;
-      z-index: 10;
-    }
-
-    #message {
-      text-align: center;
-      padding: 15px;
-      color: #ccc;
-      font-size: 14px;
-    }
-
-    #fallback {
-      display: none;
-      text-align: center;
-      padding: 15px;
-      background: #222;
-    }
-
-    #fallback button {
-      border: none;
+    button {
+      margin: 12px;
+      padding: 15px 22px;
+      border: 0;
       border-radius: 25px;
-      padding: 12px 20px;
       font-size: 16px;
-      cursor: pointer;
+      font-weight: bold;
+    }
+
+    #gps {
+      padding: 15px;
+      background: #222;
+    }
+
+    #camera {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: black;
+      z-index: 20;
+    }
+
+    #video {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+
+    #modelOverlay {
+      position: absolute;
+      left: 50%;
+      top: 50%;
+      transform: translate(-50%, -50%);
+      width: 80%;
+      height: 60%;
+      background: transparent;
+    }
+
+    #closeCamera {
+      position: absolute;
+      top: 20px;
+      right: 20px;
+      z-index: 30;
     }
   </style>
 </head>
@@ -87,164 +79,223 @@
 <body>
 
 <header>
-  <h1>Mausolée royal de Maurétanie</h1>
-  <p>Reconstitution historique en 3D</p>
+  <h1>🏛️ Mausolée royal de Maurétanie</h1>
+  <p>Test de positionnement GPS</p>
 </header>
 
-<model-viewer
-  id="model"
-  src="mausolee.glb"
-  alt="Reconstitution 3D du Mausolée royal de Maurétanie"
-  camera-controls
-  touch-action="pan-y"
-  shadow-intensity="1"
-  exposure="1"
-  environment-image="neutral"
-  ar
-  ar-modes="scene-viewer webxr quick-look"
-  ar-scale="fixed">
-
-  <button id="ar-button" slot="ar-button">
-    📱 Voir en réalité augmentée
-  </button>
-
-</model-viewer>
-
-<div id="message">
-  Faites tourner le modèle avec votre doigt ou votre souris.
+<div id="gps">
+  <p id="status">Recherche de votre position...</p>
+  <p id="distance"></p>
+  <p id="direction"></p>
 </div>
 
-<div id="fallback">
-  <p>
-    La réalité augmentée native n'est pas disponible sur cet appareil.
-  </p>
+<button onclick="startGPS()">
+  📍 Activer ma position
+</button>
 
-  <button onclick="showCameraMode()">
-    📷 Essayer le mode caméra
+<button onclick="openCamera()">
+  📷 Mode caméra
+</button>
+
+<model-viewer
+  src="mausolee.glb"
+  alt="Mausolée royal de Maurétanie"
+  camera-controls
+  shadow-intensity="1"
+  exposure="1">
+</model-viewer>
+
+<div id="camera">
+
+  <video id="video" autoplay playsinline></video>
+
+  <model-viewer
+    id="modelOverlay"
+    src="mausolee.glb"
+    camera-controls
+    shadow-intensity="1">
+  </model-viewer>
+
+  <button id="closeCamera" onclick="closeCamera()">
+    ✕ Fermer
   </button>
+
 </div>
 
 <script>
 
-  const model = document.getElementById("model");
-  const arButton = document.getElementById("ar-button");
-  const fallback = document.getElementById("fallback");
+const TARGET_LAT = 36.6724831;
+const TARGET_LON = 3.1432060;
 
-  /*
-   * Vérification de la disponibilité de l'AR
-   */
+let userLat = null;
+let userLon = null;
 
-  model.addEventListener("load", async () => {
+function startGPS() {
 
-    try {
+  if (!navigator.geolocation) {
 
-      const available = await model.canActivateAR;
+    document.getElementById("status").innerText =
+      "❌ GPS non disponible.";
 
-      if (available) {
-        arButton.style.display = "block";
-      } else {
-        fallback.style.display = "block";
-      }
+    return;
+  }
 
-    } catch (error) {
+  document.getElementById("status").innerText =
+    "📍 Recherche GPS...";
 
-      fallback.style.display = "block";
+  navigator.geolocation.watchPosition(
 
-    }
+    function(position) {
 
-  });
+      userLat = position.coords.latitude;
+      userLon = position.coords.longitude;
 
-  /*
-   * Mode caméra de secours
-   *
-   * Important :
-   * ce mode ne fournit pas le même tracking
-   * qu'une vraie ARCore/ARKit.
-   */
-
-  async function showCameraMode() {
-
-    if (!navigator.mediaDevices ||
-        !navigator.mediaDevices.getUserMedia) {
-
-      alert(
-        "La caméra n'est pas disponible sur ce navigateur."
+      const distance = calculateDistance(
+        userLat,
+        userLon,
+        TARGET_LAT,
+        TARGET_LON
       );
 
-      return;
-    }
-
-    try {
-
-      const stream =
-        await navigator.mediaDevices.getUserMedia({
-          video: {
-            facingMode: "environment"
-          }
-        });
-
-      document.body.innerHTML = `
-        <div style="
-          position:fixed;
-          inset:0;
-          background:black;
-          overflow:hidden;
-        ">
-
-          <video
-            id="camera"
-            autoplay
-            playsinline
-            style="
-              width:100%;
-              height:100%;
-              object-fit:cover;
-            ">
-          </video>
-
-          <div style="
-            position:absolute;
-            top:15px;
-            left:15px;
-            right:15px;
-            padding:12px;
-            background:rgba(0,0,0,.65);
-            color:white;
-            border-radius:10px;
-            text-align:center;
-          ">
-            Mode caméra de secours
-          </div>
-
-          <button
-            onclick="location.reload()"
-            style="
-              position:absolute;
-              bottom:25px;
-              left:50%;
-              transform:translateX(-50%);
-              padding:14px 22px;
-              border:none;
-              border-radius:25px;
-              font-size:16px;
-            ">
-            Retour
-          </button>
-
-        </div>
-      `;
-
-      document.getElementById("camera").srcObject = stream;
-
-    } catch (error) {
-
-      alert(
-        "Impossible d'accéder à la caméra. Vérifiez les permissions."
+      const bearing = calculateBearing(
+        userLat,
+        userLon,
+        TARGET_LAT,
+        TARGET_LON
       );
 
+      document.getElementById("status").innerText =
+        "✅ Position GPS détectée";
+
+      document.getElementById("distance").innerText =
+        "📏 Distance : " + Math.round(distance) + " m";
+
+      document.getElementById("direction").innerText =
+        "🧭 Direction du monument : " +
+        Math.round(bearing) + "°";
+
+    },
+
+    function(error) {
+
+      document.getElementById("status").innerText =
+        "❌ Impossible d'obtenir votre position GPS.";
+
+    },
+
+    {
+      enableHighAccuracy: true,
+      maximumAge: 3000,
+      timeout: 15000
     }
+  );
+}
+
+
+/* Distance entre deux positions GPS */
+
+function calculateDistance(lat1, lon1, lat2, lon2) {
+
+  const R = 6371000;
+
+  const p1 = lat1 * Math.PI / 180;
+  const p2 = lat2 * Math.PI / 180;
+
+  const dp =
+    (lat2 - lat1) * Math.PI / 180;
+
+  const dl =
+    (lon2 - lon1) * Math.PI / 180;
+
+  const a =
+    Math.sin(dp / 2) *
+    Math.sin(dp / 2) +
+
+    Math.cos(p1) *
+    Math.cos(p2) *
+    Math.sin(dl / 2) *
+    Math.sin(dl / 2);
+
+  const c =
+    2 * Math.atan2(
+      Math.sqrt(a),
+      Math.sqrt(1 - a)
+    );
+
+  return R * c;
+}
+
+
+/* Direction vers le point cible */
+
+function calculateBearing(lat1, lon1, lat2, lon2) {
+
+  const p1 = lat1 * Math.PI / 180;
+  const p2 = lat2 * Math.PI / 180;
+
+  const dl =
+    (lon2 - lon1) * Math.PI / 180;
+
+  const y =
+    Math.sin(dl) * Math.cos(p2);
+
+  const x =
+    Math.cos(p1) * Math.sin(p2) -
+    Math.sin(p1) *
+    Math.cos(p2) *
+    Math.cos(dl);
+
+  let bearing =
+    Math.atan2(y, x) * 180 / Math.PI;
+
+  return (bearing + 360) % 360;
+}
+
+
+/* Caméra */
+
+async function openCamera() {
+
+  try {
+
+    const stream =
+      await navigator.mediaDevices.getUserMedia({
+        video: {
+          facingMode: "environment"
+        }
+      });
+
+    document.getElementById("video").srcObject =
+      stream;
+
+    document.getElementById("camera").style.display =
+      "block";
+
+  } catch (error) {
+
+    alert(
+      "Impossible d'ouvrir la caméra. Autorisez l'accès à la caméra."
+    );
 
   }
+}
+
+
+function closeCamera() {
+
+  const video =
+    document.getElementById("video");
+
+  if (video.srcObject) {
+
+    video.srcObject
+      .getTracks()
+      .forEach(track => track.stop());
+  }
+
+  document.getElementById("camera").style.display =
+    "none";
+}
 
 </script>
 
